@@ -15,11 +15,19 @@ Bool Property Respawnables = False Auto Const
 String Property PackName Auto Const
 ObjectReference _testPlaceholder
 
-int Property InstituteObjectiveID = -1 Auto Const
+int Property InstituteObjectiveID = 12 Auto Const
+int Property InstituteCellFormID = 0x0002A199 Auto Const
 
 String Property WorldSpaceName = "Commonwealth" Auto Const
+int Property WorldSpaceID = 0x0000003C Auto Const
 
-String Property RequiredDLC Auto Const
+;int DIAMOND_CITY_FORM_ID = 0x00000F94 Const
+;int COMMONWEALTH_FORM_ID = 0x0000003C Const
+;int GOODNEIGHBOR_FORM_ID = 0x00054BD5 Const
+;int NUKA_WORL_MARKET_FORM_ID = 0x06053C58 Const
+;int NUKA_WORL_FORM_ID = 0x0600290F Const
+
+String Property RequiredDLC = "Fallout4.esm" Auto Const
 
 struct QuestObjective
     int ID
@@ -40,7 +48,7 @@ struct ObjectiveTarget
     bool PowerArmor
     bool Resolved
     bool OnlyInProperCell
-    Cell TargetCell
+    Form TargetCell
     int TargetCellID
     Form FormID
     int FormIDValue
@@ -59,8 +67,6 @@ endStruct
 QuestObjective[] Property Objectives Auto
 ObjectiveTarget[] Property ObjectivesTargets Auto
 ObjectiveQuestRequirement[] Property ObjectivesRequirements Auto
-
-Cell Property InstituteCell Auto
 
 bool Property Processed = false Auto
 bool Property Enabled = false Auto
@@ -114,27 +120,6 @@ bool function CanDisplayObjective(ObjectiveQuestRequirement req)
         return req.ReqQuest.GetStage() <= req.Stage
     endif
 endFunction
-;/
-bool function CanDisplayObjectiveById(int id)
-    QuestObjective objective = GetObjective(id)
-
-    return CanDisplayObjective(objective)
-endFunction
-
-;/
-function RegisterQuestsRequirements()
-    Quest[] processedQuests = new Quest[0]
-
-    int i = 0
-    while i < ObjectivesRequirements.Length
-        ObjectiveQuestRequirement req = ObjectivesRequirements[i]
-        if(processedQuests.Find(req.ReqQuest) < 0)
-            processedQuests.Add(req.ReqQuest)
-            RegisterForRemoteEvent(req.ReqQuest, "OnStageSet")
-        endif
-        i += 1
-    endWhile
-endFunction/;
 
 bool function IsQuestCompleted()
     int i = 0
@@ -154,7 +139,7 @@ function TraceAllTargets()
     int i = 0
     while i < ObjectivesTargets.Length
         target = ObjectivesTargets[i]
-        Trace("Objective Target: " + target.ObjectiveID + ", with order: " + target.Order + " and data: " + target.FormID.GetName())
+        Trace("Objective Target: " + target.ObjectiveID + ", with order: " + target.Order + " and data: " + target.FormID)
         i += 1
     endWhile
 endFunction
@@ -187,6 +172,7 @@ function LoadPackData()
             ResolveObjectiveTargets(objective)
             i += 1
         endif
+
     endWhile
 
     Processed = true
@@ -359,37 +345,7 @@ function HidePack()
     UnregisterForRemoteEvent(_playerReference, "OnItemAdded")
     UnregisterForAllEvents()
 endFunction
-;/
-function CleanRequirements()
-    int i = 0
-    while i < ObjectivesRequirements.Length
-        ObjectiveQuestRequirement req = ObjectivesRequirements[i]
-        Quest q = req.ReqQuest
-        if(q.GetStage() > req.Stage)
-            ObjectivesRequirements.Remove(i)
-            if(TotalRequirementsForQuest(q) < 1)
-                UnregisterForRemoteEvent(q, "OnStageSet")
-            endif
-        else
-            i += 1
-        endif
-    endWhile
-endFunction
 
-int function TotalRequirementsForQuest(Quest q)
-    int total = 0
-
-    int i = 0
-    while i < ObjectivesRequirements.Length
-        if(ObjectivesRequirements[i].ReqQuest == q)
-            total += 1
-        endif
-        i += 1
-    endWhile
-
-    return total
-endFunction
-/;
 function QueueReset(QuestObjective objective)
     float multiplier = _locatorsManager.ClearedCellRespawnMultiplier.GetValue()
 
@@ -574,11 +530,32 @@ endFunction
 
 ; RESOLVE FUNCTIONS
 
-bool function CompareCell(Cell currentCell, ObjectiveTarget target)
-    bool result = target.TargetCell != NONE && currentCell == target.TargetCell
+bool function CompareCell(int currentCell, ObjectiveTarget target)
+    Trace("Comparing current cell " + currentCell + " with " + target)
+    if(target == NONE)
+        Trace("***************************************** ERROR: NULL TARGET ON " + PackName + " *****************************************")
+        return false
+    endif
 
-;    Trace("Comparing " + currentCell + " with " + target.TargetCell)
-    return result
+    if(target.TargetCellID != 0)
+        Trace("Target Cell ID: " + target.TargetCellID + " comparing to " + currentCell)
+        return currentCell == target.TargetCellID
+    endif
+
+    if(target.TargetCell == NONE)
+        Trace("Target " + target + " has no TargetCell and has TargetCellID " + target.TargetCellID)
+        return false
+    endif
+
+    Form targetCell = target.TargetCell as Form
+    if(targetCell == NONE)
+        Trace("Taget " + target + " Cell is not a form.")
+        return false
+    endif
+
+    Trace("PackName " + PackName + " has TargetCell but no TargetCellID")
+    ; This might explode. No idea why
+    return targetCell != NONE && currentCell == targetCell.GetFormID()
 endFunction
 
 ObjectReference function ResolvePowerArmor(ObjectiveTarget target)
@@ -590,11 +567,12 @@ ObjectReference function ResolvePowerArmor(ObjectiveTarget target)
 
     if(_testPlaceHolder == NONE)
         _testPlaceHolder = _playerReference.PlaceAtMe(ObjectivePlaceholder, 1, true, true)
+        _testPlaceHolder.WaitFor3DLoad()
     endif
     _testPlaceHolder.SetPosition(target.X, target.Y, target.Z)
     ObjectReference[] references = _testPlaceHolder.FindAllReferencesWithKeyword(PA_Keyword, 1000)
     if(references.Length > 0)
-        Trace("FindAllReferencesWithKeyword Found a target! " + references[0].GetDisplayName())
+        Trace("FindAllReferencesWithKeyword Found a target! " + references[0].GetFormID())
         return references[0]
     endif
 
@@ -602,13 +580,13 @@ ObjectReference function ResolvePowerArmor(ObjectiveTarget target)
     if(CompareCell(_locatorsManager.CurrentCell(), target))
         objRef = Game.FindClosestReferenceOfType(target.FormID, target.X, target.Y, target.Z, 1000)
         if(objRef != NONE)
-            Trace("Found the object for the main FormID " + target.FormID.GetName())
+            Trace("Found the object for the main FormID " + target.FormID)
             return objRef
         endif
         if(target.SecondaryFormID != NONE)
             objRef = Game.FindClosestReferenceOfType(target.SecondaryFormID, target.X, target.Y, target.Z, 1000)
             if(objRef != NONE)
-                Trace("Found the object for the secondary FormID " + target.SecondaryFormID.GetName())
+                Trace("Found the object for the secondary FormID " + target.SecondaryFormID)
                 return objRef
             endif
         endif
@@ -630,7 +608,7 @@ ObjectReference function ResolvePowerArmor(ObjectiveTarget target)
                 endif
                 bool isHostile = curActor.IsHostileToActor(_playerReference)
                 if(curActor.IsInPowerArmor() && isHostile)
-                    Trace("We found the enemy by going through the list! " + curActor.GetDisplayName())
+                    Trace("We found the enemy by going through the list! " + curActor.GetFormID())
                     return curActor
                 endif
             endif
@@ -659,9 +637,11 @@ endFunction
 
 ObjectReference function ResolvePlaceholder(QuestObjective objective, ObjectiveTarget target)
     ObjectReference placeholder = _playerReference.PlaceAtMe(ObjectivePlaceholder, 1, true, true)
+    
     if(placeholder == NONE)
         Trace("CreatePlaceholder - Could not create the Placeholder!!!")
     else
+        placeholder.WaitFor3DLoad()
         placeholder.SetPosition(target.X, target.Y, target.Z + 0.2)
         objective.CurrentTarget = target.Order
         objective.CurrentState == StatePlaceholder
@@ -695,12 +675,12 @@ event ObjectReference.OnItemAdded(ObjectReference oPlayer, Form akBaseItem, int 
     endif
 endEvent
 
-function ProcessCellLoaded(Cell curCell)
+function ProcessCellLoaded(int curCell)
     ChangeCell(curCell)
 endFunction
 
 event OnDistanceLessThan(ObjectReference player, ObjectReference objRef, float distance)
-    Trace("OnDistanceLessThan: " + objRef.GetDisplayName())
+    Trace("OnDistanceLessThan: " + objRef.GetFormID())
     QuestObjective objective = GetQuestObjectiveByObjRef(objRef)
     if(objective != NONE)
         Trace("Completed Objective: " + objective.ID + " at " + PackName)
@@ -712,43 +692,25 @@ event OnDistanceLessThan(ObjectReference player, ObjectReference objRef, float d
             CheckRemoveInventoryFilter(objective)
         endif
     else
-        Trace("Could not find reference for ObjRef: " + objRef.GetDisplayName())
+        Trace("Could not find reference for ObjRef: " + objRef.GetFormID())
     endif
 endEvent
 
-;/event Quest.OnStageSet(Quest q, int auiStageID, int auiItemID)
-    int i = 0
-
-    while i < ObjectivesRequirements.Length
-        ObjectiveQuestRequirement req = ObjectivesRequirements[i]
-        if(req.ReqQuest == q)
-            if(CanDisplayObjectiveById(req.ObjectiveID))
-                SetObjectiveDisplayed(req.ObjectiveID, true)
-            else
-                SetObjectiveDisplayed(req.ObjectiveID, false)
-            endif
-        endif
-        i += 1
-    endWhile
-
-    CleanRequirements()
-endEvent/;
-
 ; END CALLBACKS
 
-function ChangeCell(Cell newCell)
-    if(newCell == NONE)
+function ChangeCell(int newCell)
+    if(newCell == 0)
         Trace("Current Cell is Null!")
     endif
 
     ResolveQuestObjectivesByCell(newCell)
 endFunction
 
-function VerifyInstituteCell(Cell newCell)
-    if(InstituteObjectiveID >= 0 && newCell == InstituteCell)
-        SetObjectiveCompleted(InstituteObjectiveID)
-    endif
-endFunction
+;function VerifyInstituteCell(int newCell)
+    ;if(InstituteObjectiveID >= 0 && newCell == InstituteCell)
+    ;    SetObjectiveCompleted(InstituteObjectiveID)
+    ;endif
+;endFunction
 
 function ResolveObjectiveTargets(QuestObjective objective)
     ObjectiveTarget[] targets = GetNonResolvedTargets(objective.id)
@@ -785,7 +747,7 @@ function ResolveObjectiveTargets(QuestObjective objective)
     endif
 endFunction
 
-function ResolveObjectiveTargetsOnCell(QuestObjective objective, Cell newCell, ObjectiveTarget[] targets)
+function ResolveObjectiveTargetsOnCell(QuestObjective objective, int newCell, ObjectiveTarget[] targets)
     if(targets == NONE)
         targets = GetNonResolvedTargetsOnCell(objective.id, newCell)
     endif
@@ -799,7 +761,7 @@ function ResolveObjectiveTargetsOnCell(QuestObjective objective, Cell newCell, O
     endWhile
 endFunction
 
-function ResolveQuestObjectivesByCell(Cell newCell)
+function ResolveQuestObjectivesByCell(int newCell)
     QuestObjective objective
     ObjectiveTarget target
 
@@ -923,12 +885,10 @@ function ResolveTargetsWithOrderHigher(int id, int order)
     endWhile
 endFunction
 
-QuestObjective[] function GetQuestObjectivesByCell(Cell newCell)
+QuestObjective[] function GetQuestObjectivesByCell(int newCell)
     QuestObjective[] objs = new QuestObjective[0]
     QuestObjective objective
     ObjectiveTarget target
-
-    string cellName = newCell.GetName()
 
     int i = 0
     while i < Objectives.Length
@@ -960,7 +920,7 @@ ObjectiveTarget[] function GetNonResolvedTargets(int id)
     return targets
 endFunction
 
-ObjectiveTarget[] function GetNonResolvedTargetsOnCell(int id, Cell newCell)
+ObjectiveTarget[] function GetNonResolvedTargetsOnCell(int id, int newCell)
     ObjectiveTarget[] targets = new ObjectiveTarget[0]
     QuestObjective objective = GetObjective(id)
 
@@ -979,7 +939,7 @@ ObjectiveTarget[] function GetNonResolvedTargetsOnCell(int id, Cell newCell)
     return targets
 endFunction
 
-ObjectiveTarget function GetLastNonResolvedTargetForCell(int id, Cell newCell)
+ObjectiveTarget function GetLastNonResolvedTargetForCell(int id, int newCell)
     ObjectiveTarget[] targets = GetNonResolvedTargets(id)
 
     int i = 0

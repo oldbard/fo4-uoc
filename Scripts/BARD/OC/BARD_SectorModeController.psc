@@ -71,6 +71,8 @@ function LoadAllObjectives()
     while i < _quests.Length
         BARD:OC:BARD_LocatorsPackData packData = _quests[i] as BARD:OC:BARD_LocatorsPackData
         totalObjectivesProcessed += LoadPackData(packData)
+        Utility.Wait(0.05)
+
         i += 1
     endWhile
     Trace("A total of " + totalObjectivesProcessed + " objectives were processed")
@@ -153,7 +155,7 @@ function ToggleObjectives(ObjectiveData[] allObjectives)
         data = allObjectives[i]
 
         if(data.QuestPack.Visible && !data.QuestPack.IsObjectiveCompleted(data.ObjectiveID)); && data.QuestPack.CanDisplayObjectiveById(data.ObjectiveID))
-            if(GetManager().HasSameWorldSpace(data.QuestPack.WorldSpaceName))
+            if(GetManager().HasSameWorldSpace(data.QuestPack.WorldSpaceID))
                 data.QuestPack.SetActive(true)
                 if(data.TargetObject != NONE)
                     ToggleObjective(data, false)

@@ -28,7 +28,7 @@ GlobalVariable Property ClearedCellRespawnMultiplier Auto
 GlobalVariable Property PA_DetectionRange Auto
 
 String Property RequiredDLC Auto
-String Property RequiredWorldSpace Auto
+int Property RequiredWorldSpace Auto
 
 event OnQuestInit()
     Trace("Initiated Quest " + PackName)
@@ -51,6 +51,7 @@ function LoadPackage()
         if(!TryCompleteObjective(objective))
             ResolveObjective(objective)
         endif
+
         i += 1
     endWhile
 
@@ -83,7 +84,7 @@ function ResolveReference(QuestObjective objective)
     endif
 endFunction
 
-function RefreshReference(Cell curCell)
+function RefreshReference(int curCell)
     QuestObjective objective = NONE
 
     int i = 0
@@ -155,14 +156,14 @@ endFunction
 
 ; UTILS
 
-bool function CanBeInstalled(string currentWorldSpace)
+bool function CanBeInstalled(int currentWorldSpace)
     bool canBeInstalled = false
     if(RequiredDLC != "")
         canBeInstalled = Game.IsPluginInstalled(RequiredDLC)
         Trace("Requires DLC: " + RequiredDLC)
     endif
 
-    if(RequiredWorldSpace != "")
+    if(RequiredWorldSpace != 0)
         canBeInstalled = canBeInstalled && RequiredWorldSpace == currentWorldSpace
         Trace("Requires WorldSpace: " + RequiredWorldSpace)
     endif
@@ -290,7 +291,7 @@ event ObjectReference.OnItemAdded(ObjectReference oPlayer, Form akBaseItem, int 
 endEvent
 
 event OnDistanceLessThan(ObjectReference player, ObjectReference objRef, float distance)
-    Trace("OnDistanceLessThan: " + objRef.GetDisplayName())
+    Trace("OnDistanceLessThan: " + objRef.GetFormID())
     QuestObjective objective = GetQuestObjectiveByObjRef(objRef)
     if(objective != NONE)
         Trace("Completed Objective: " + objective.ID + " at " + PackName)
@@ -301,7 +302,7 @@ event OnDistanceLessThan(ObjectReference player, ObjectReference objRef, float d
             CompleteQuest()
         endif
     else
-        Trace("Could not find reference for ObjRef: " + objRef.GetDisplayName())
+        Trace("Could not find reference for ObjRef: " + objRef.GetFormID())
     endif
 endEvent
 

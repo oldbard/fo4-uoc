@@ -1,5 +1,7 @@
 Scriptname BARD:OC:BARD_InitialQuest extends Quest
 
+int _commonWealthFormID = 0x0000003C Const
+
 Message Property MessageOverrideStart Auto Const
 
 Form Property TerminalObj Auto Const
@@ -27,31 +29,37 @@ BARD:OC:BARD_LocatorsManager _locatorsManager
 ObjectReference _terminal
 Actor _drone
 
-float Property MaxWaitingTime = 10.0 Auto Const
-
 event OnQuestInit()
     _playerReference = Game.GetPlayer() as Actor
     ;_locatorsManager = Manager as BARD:OC:BARD_LocatorsManager
 endEvent
 
 function StartQuest(bool exterior)
+	Trace("Starting Quest")
     RegisterForRemoteEvent(_playerReference, "OnItemAdded")
     AddInventoryEventFilter(HolotapeReference)
 
     SetActive()
 
-    if(NewManager.CurrentWorldSpace() == "Commonwealth")
+	Trace("Current WorldSpace: " + NewManager.CurrentWorldSpace() + ", expecting: " + _commonWealthFormID)
+
+    if(NewManager.CurrentWorldSpace() == _commonWealthFormID)
         if(exterior)
+    	    Trace("We are at the CommonWealth at an exterior cell")
             StartExterior()
         else
+    	    Trace("We are at the CommonWealth at an interior cell")
             StartInterior()
         endif
     else
+	    Trace("Oh no! Where are we?")
         StartWrongWorldSpace()
     endif
 endFunction
 
 function StartExterior()
+	Trace("Starting Exterior")
+
     if(IsObjectiveDisplayed(0))
         SetObjectiveCompleted(0)
     endif
@@ -59,27 +67,13 @@ function StartExterior()
         SetObjectiveCompleted(1)
     endif
 
-    _terminal = _playerReference.PlaceAtMe(TerminalObj, 1)
+	Trace("Placing Terminal!")
+    _terminal = _playerReference.PlaceAtMe(TerminalObj, 1, true)
+    _terminal.WaitFor3DLoad()
     _terminal.SetPosition(_playerReference.GetPositionX(), _playerReference.GetPositionY(), _playerReference.GetPositionZ() - 50)
-    
-    bool stopWaiting = false
-    float waitedTime = 0
-    
-    while(!_terminal.Is3dLoaded() && !stopWaiting)
-        waitedTime += 0.1
-        if(waitedTime > MaxWaitingTime)
-            stopWaiting = true
-        else
-            Utility.Wait(0.1)
-            Trace("Waited a bit for terminal model to load")
-        endif
-    endWhile
+	Trace("Placed Terminal!")
 
-    if(stopWaiting)
-        FinishWithoutQuest()
-    else
-        FinishStart()
-    endif
+    FinishStart()
 endFunction
 
 function FinishStart()
@@ -89,29 +83,19 @@ function FinishStart()
 	ReferenceAlias terminalAlias = GetAlias(2) as ReferenceAlias
 	terminalAlias.ForceRefTo(_terminal)
     
+	Trace("Placing Drone!")
 	_drone = _playerReference.PlaceAtMe(EyeBotObj) as Actor
+    _drone.WaitFor3DLoad()
 	_drone.SetPosition(DroneX, DroneY, DroneZ)
     
 	ReferenceAlias droneAlias = GetAlias(1) as ReferenceAlias
     droneAlias.ForceRefTo(_drone as ObjectReference)
 
 	_drone.Kill()
+	Trace("Placed Drone!")
 
     SetStage(20)
 	SetObjectiveDisplayed(2)
-endFunction
-
-function FinishWithoutQuest()
-    _terminal.Delete()
-    SetStage(30)
-    Disable(false)
-    Trace("Finished Without Quest")
-
-    MessageOverrideStart.Show()
-
-    (Manager as BARD:OC:BARD_LocatorsManager).InitPackageLoading()
-	ObjectReference holo = _playerReference.PlaceAtMe(HolotapeReference, 1, true, true)
-    _playerReference.AddItem(holo)
 endFunction
 
 function StartInterior()

@@ -1,5 +1,7 @@
 Scriptname BARD:OC:BARD_UOC_Manager extends Quest
 
+int COMMONWEALTH_FORM_ID = 0x0000003C Const
+
 BARD:OC:BARD_UOC_PackData[] Property Packages Auto
 
 Quest Property ProximityDetector Auto
@@ -16,9 +18,8 @@ Actor Property PlayerReference Auto
 Message Property UninstalledMessage Auto
 
 BARD:OC:BARD_UOC_PackData[] _queuedPackages
-;Quest[] _cellChangedListeners
 
-string _currentWorldSpace = ""
+int _currentWorldSpace = 0
 bool _exteriorCell = false
 bool _pendingInitialQuest = false
 bool _pendingLoadPackages = false
@@ -27,7 +28,7 @@ InputEnableLayer _tempLayer = NONE
 float _curTimeScale
 bool _fastTravelEnabled
 
-;BARD:OC:BARD_SectorModeController _sectorController
+BARD:OC:BARD_SectorModeController _sectorController
 BARD:OC:BARD_InitialQuest _initialQuest
 
 event OnQuestInit()
@@ -38,16 +39,15 @@ event OnQuestInit()
 	WorldSpace ws = PlayerReference.GetWorldSpace()
 
 	if(ws != NONE)
-		_currentWorldSpace = ws.GetName()
+		_currentWorldSpace = ws.GetFormID()
 	endif
 
 	Utility.Wait(10)
+
+	Trace("Waited to start checks")
+
 	UpdateIsExteriorCell()
 
-	;_initialQuest.StartQuest(IsExteriorCell())
-	;if(!IsExteriorCell())
-	;	_pendingInitialQuest = true
-    ;endif
     ProcessPendingPackages()
 
 	InitCellLoadDetection()
@@ -97,7 +97,7 @@ event ObjectReference.OnCellLoad(ObjectReference objRef)
 	bool changedWorldSpace = false
 	WorldSpace space = PlayerReference.GetWorldSpace()
 	if(space != NONE)
-		string currentWorldSpace = space.GetName()
+		int currentWorldSpace = space.GetFormID()
 		if(currentWorldSpace != _currentWorldSpace)
 			_currentWorldSpace = currentWorldSpace
 		endif
@@ -105,7 +105,7 @@ event ObjectReference.OnCellLoad(ObjectReference objRef)
 
 	if(IsExteriorCell())
 		if(_pendingInitialQuest)
-			if(_currentWorldSpace == "Commonwealth")
+			if(_currentWorldSpace == COMMONWEALTH_FORM_ID)
 				_pendingInitialQuest = false
 				_initialQuest.StartExterior()
 			endif
@@ -122,7 +122,7 @@ event ObjectReference.OnCellLoad(ObjectReference objRef)
 		int i = 0
 		while i < Packages.Length
 			BARD:OC:BARD_UOC_PackData pack = Packages[i]
-			pack.RefreshReference(NONE)
+			pack.RefreshReference(0)
 			i += 1
 		endWhile
 	endif
@@ -130,18 +130,6 @@ event ObjectReference.OnCellLoad(ObjectReference objRef)
 	Cell curCell = PlayerReference.GetParentCell()
 
 	Trace("OnCellLoad " + curCell + " - Exterior: " + IsExteriorCell() + " at " + _currentWorldSpace)
-;/
-	if(_cellChangedListeners != NONE && _cellChangedListeners.Length > 0)
-		int i = 0
-		while i < _cellChangedListeners.Length
-			BARD:OC:BARD_ModUpdater updater = _cellChangedListeners[i] as BARD:OC:BARD_ModUpdater
-
-			if(updater != NONE)
-				updater.ProcessCellLoaded(curCell, IsExteriorCell())
-			endif
-			i += 1
-		endWhile
-	endif/;
 endEvent
 
 event OnTimer(int id)
@@ -159,7 +147,7 @@ function ProcessPendingPackages()
     while i < _queuedPackages.Length
         pack = _queuedPackages[i]
         Trace("Trying to Load " + pack.PackName)
-        if(true);pack.CanBeInstalled(_currentWorldSpace))
+        if(pack.CanBeInstalled(_currentWorldSpace))
             pack.LoadPackage()
             _queuedPackages.Remove(i)
 			Packages.Add(pack)

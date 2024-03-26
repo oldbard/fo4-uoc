@@ -50,7 +50,7 @@ endFunction
 bool function CanProcessData()
     if(_locatorsManager.IsExteriorCell())
         UpdatePackage pack = GetLowestVersionPack()
-        if(pack != NONE && _locatorsManager.HasSameWorldSpace((pack.PackData as BARD:OC:BARD_LocatorsPackData).WorldSpaceName))
+        if(pack != NONE && _locatorsManager.HasSameWorldSpace((pack.PackData as BARD:OC:BARD_LocatorsPackData).WorldSpaceID))
             return true
         endif
     endif
@@ -73,7 +73,9 @@ endFunction
 
 function Disable(bool stop)
     UnregisterForAllEvents()
-    _packages.Clear()
+    if(_packages != NONE)
+        _packages.Clear()
+    endif
 
     if(stop)
         Trace("Stopped Quest")
@@ -119,7 +121,7 @@ function AddPackData(Quest[] packages, float version)
     TryQueueSendData()
 endFunction
 
-function ProcessCellLoaded(Cell curCell, bool exterior)
+function ProcessCellLoaded(int curCell, bool exterior)
     Trace("ProcessCellLoaded")
     if(CanProcessData())
         Trace("ProcessCellLoaded - Can process data!")
@@ -194,7 +196,7 @@ UpdatePackage function GetLowestVersionPack()
         UpdatePackage pack = _packages[i]
         if(pack.Processed == false && pack.Version < lowestVersion)
             BARD:OC:BARD_LocatorsPackData packData = pack.PackData as BARD:OC:BARD_LocatorsPackData
-            if(_locatorsManager.HasSameWorldSpace(packData.WorldSpaceName))
+            if(_locatorsManager.HasSameWorldSpace(packData.WorldSpaceID))
                 lowestVersion = pack.Version
                 lowestVersionPack = pack
             endif

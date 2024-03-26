@@ -1,5 +1,17 @@
 Scriptname BARD:OC:BARD_LocatorsManager extends Quest
 
+int GOOD_GOODNEIGHBOR_FORM_ID = 347113 const
+int GOOD_DIAMOND_CITY_FORM_ID = 4078 Const
+
+int DIAMOND_CITY_FORM_ID = 0x00000F94 Const
+int COMMONWEALTH_FORM_ID = 0x0000003C Const
+int GOODNEIGHBOR_FORM_ID = 0x00054BD5 Const
+int NUKA_WORL_MARKET_FORM_ID = 0x06053C58 Const
+int NUKA_WORL_FORM_ID = 0x0600290F Const
+
+int BAD_DIAMOND_CITY_FORM_ID = 0x00000FC9 Const
+int BAD_GOODNEIGHBOR_FORM_ID = 0x00054BF0 Const
+
 int _xOffset = 6 const
 int _yOffset = 6 const
 
@@ -24,22 +36,16 @@ Message Property UninstalledMessage Auto Const
 Keyword Property NPCKeyword Auto Const
 Race Property PowerArmorRace Auto Const
 
-Form Property BadGoodneighbor Auto
-Cell Property GoodGoodneighbor Auto
-
-Form Property BadDiamondCity Auto
-Cell Property GoodDiamondCity Auto
-
 Quest[] _cellChangedListeners
 
 Actor _playerReference
 
-Cell _latestCell
+int _latestCell
 bool _exteriorCell = false
 
 bool _pendingLoadPackages = false
 
-string _lastWorldSpace = ""
+int _lastWorldSpace = 0
 
 int _totalObjectives
 
@@ -66,7 +72,7 @@ Quest[] function GetNWQuests()
 	return _nwPackages
 endFunction
 
-string function GetWorldSpaceName()
+int function GetWorldSpaceName()
 	return _lastWorldSpace
 endFunction
 
@@ -75,7 +81,8 @@ int function TotalNotProcessedQuests()
 	
 	int i = 0
 	while i < Packages.Length
-		if(!(Packages[i] as BARD:OC:BARD_LocatorsPackData).Processed)
+	    BARD:OC:BARD_LocatorsPackData packData = Packages[i] as BARD:OC:BARD_LocatorsPackData
+		if(!packData.Processed)
 			total += 1
 		endif
 		i += 1
@@ -112,8 +119,10 @@ event OnQuestInit()
 	WorldSpace ws = _playerReference.GetWorldSpace()
 
 	if(ws != NONE)
-		_lastWorldSpace = ws.GetName()
+		_lastWorldSpace = ws.GetFormID()
 	endif
+
+	_latestCell = _playerReference.GetParentCell().GetFormID()
 
 	Utility.Wait(5)
 	UpdateIsExteriorCell()
@@ -150,7 +159,7 @@ function PrepareToUninstall()
 
 	TimescaleGlobal = NONE
 	_playerReference = NONE
-	_latestCell = NONE
+	_latestCell = 0
 	_sectorController = NONE
 	_initialQuest = NONE
 
@@ -159,6 +168,8 @@ endFunction
 
 function InitCellLoadDetection()
 	ObjectReference placeholder = _playerReference.PlaceAtMe(PlaceholderObject, 1, true, true)
+	placeholder.WaitFor3DLoad()
+
 	RegisterForRemoteEvent((_playerReference as ObjectReference), "OnCellLoad")
 endFunction
 
@@ -188,14 +199,15 @@ function LoadPackages(bool showNotification = true)
 	bool oneQuarterDone = false
 	bool twoQuartersDone = false
 	bool threeQuartersDone = false
-	float oneQuarter = (Packages.Length) * 0.25
-	float twoQuarters = (Packages.Length) * 0.5
-	float threeQuarters = (Packages.Length) * 0.75
-	Trace("Initializing Bard's Ultimate Objects Collector... Processing: " + (Packages.Length + _additionalPackages.Length + _nwPackages.Length) + " packages.")
+	int packagesLength = Packages.Length
+	float oneQuarter = (packagesLength) * 0.25
+	float twoQuarters = (packagesLength) * 0.5
+	float threeQuarters = (packagesLength) * 0.75
+	Trace("Initializing Bard's Ultimate Objects Collector... Processing: " + (packagesLength + _additionalPackages.Length + _nwPackages.Length) + " packages.")
 	if(showNotification)
 		Debug.Notification("Initializing Bard's Ultimate Objects Collector...")
 	endif
-	int i = Packages.Length - 1
+	int i = packagesLength - 1
 	while i > -1
 		if(!oneQuarterDone && i > oneQuarter)
 			oneQuarterDone = true
@@ -217,6 +229,7 @@ function LoadPackages(bool showNotification = true)
 		endif
 
 		BARD:OC:BARD_LocatorsPackData packData = Packages[i] as BARD:OC:BARD_LocatorsPackData
+		Trace("Processing Package: " + packData.PackName)
 		if(!ProcessPackage(packData))
 			packagesNotProcessed += 1
 		endif
@@ -263,12 +276,15 @@ function DoFadeIn()
 	_tempLayer.EnablePlayerControls()
 endFunction
 
-bool function HasSameWorldSpace(string worldSpaceName)
-	return _lastWorldSpace == worldSpaceName || (_lastWorldSpace == "Diamond City" && worldSpaceName == "Commonwealth") || (_lastWorldSpace == "Goodneighbor" && worldSpaceName == "Commonwealth") || (_lastWorldSpace == "NukaWorldMarket" && worldSpaceName == "Nuka-World")
+bool function HasSameWorldSpace(int worldSpaceID)
+	return _lastWorldSpace == worldSpaceID || (_lastWorldSpace == DIAMOND_CITY_FORM_ID && worldSpaceID == COMMONWEALTH_FORM_ID) || (_lastWorldSpace == GOODNEIGHBOR_FORM_ID && worldSpaceID == COMMONWEALTH_FORM_ID) || (_lastWorldSpace == NUKA_WORL_MARKET_FORM_ID && worldSpaceID == NUKA_WORL_FORM_ID)
 endFunction
 
 bool function ProcessPackage(BARD:OC:BARD_LocatorsPackData packData)
-	if(!packData.Processed && HasSameWorldSpace(packData.WorldSpaceName))
+	Trace(packData.PackName + ": Processed: " + packData.Processed + ", Same WorldSpace: " + HasSameWorldSpace(packData.WorldSpaceID))
+
+	if(!packData.Processed && HasSameWorldSpace(packData.WorldSpaceID))
+		Trace(packData.PackName + " is not processed. Loading...")
 		LoadPackage(packData)
 		return true
 	endif
@@ -371,7 +387,7 @@ endFunction
 
 function AddPack(BARD_LocatorsPackData packData)
 	Quest[] additionalQuests
-	if(packData.WorldSpaceName == "Commonwealth")
+	if(packData.WorldSpaceID == COMMONWEALTH_FORM_ID)
 		additionalQuests = GetAdditionalQuests()
 	else
 		additionalQuests = GetNWQuests()
@@ -461,11 +477,12 @@ int function ProcessPendingPackageData(Quest[] quests)
 	int i = 0
 	while i < quests.Length
 		BARD:OC:BARD_LocatorsPackData packData = quests[i] as BARD:OC:BARD_LocatorsPackData
-		if(!packData.Processed && HasSameWorldSpace(packData.WorldSpaceName))
+		if(!packData.Processed && HasSameWorldSpace(packData.WorldSpaceID))
 			if(ProcessPendingPackage(packData))
 				totalProcessed += 1
 			endif
 		endif
+
 		i += 1
 	endWhile
 
@@ -562,7 +579,7 @@ function CompletedObjective(BARD:OC:BARD_LocatorsPackData packData, int id)
 	_sectorController.ObjectiveCompleted(packData, id)
 endFunction
 
-Cell function CurrentCell()
+int function CurrentCell()
 	return _latestCell
 endFunction
 
@@ -571,13 +588,14 @@ event ObjectReference.OnCellLoad(ObjectReference objRef)
 endEvent
 
 function OnCellChanged()
-	return
+	; No idea why this was like this. Part of the WIP for sure.
+	;return
 	UpdateIsExteriorCell()
 
 	bool changedWorldSpace = false
 	WorldSpace space = _playerReference.GetWorldSpace()
 	if(space != NONE)
-		string currentWorldSpace = space.GetName()
+		int currentWorldSpace = space.GetFormID()
 		if(currentWorldSpace != _lastWorldSpace)
 			_lastWorldSpace = currentWorldSpace
 		endif
@@ -585,7 +603,7 @@ function OnCellChanged()
 
 	if(IsExteriorCell())
 		if(_pendingLoadPackages)
-			if(_lastWorldSpace == "Commonwealth")
+			if(_lastWorldSpace == COMMONWEALTH_FORM_ID)
 				_pendingLoadPackages = false
 				_initialQuest.StartExterior()
 			endif
@@ -600,20 +618,20 @@ function OnCellChanged()
 		endif
 	endif
 	
-	Cell curCell = _playerReference.GetParentCell()
+	int curCell = _playerReference.GetParentCell().GetFormID()
 	
 	if(curCell == _latestCell)
 		return
 	endif
 	
-	if(curCell == BadGoodneighbor)
+	if(curCell == BAD_GOODNEIGHBOR_FORM_ID)
 		Trace("Found the BadGoodneighbor Cell. Switched it to the good one")
-		curCell = GoodGoodneighbor
+		curCell = GOOD_GOODNEIGHBOR_FORM_ID
 	endif
 	
-	if(curCell == BadDiamondCity)
+	if(curCell == BAD_DIAMOND_CITY_FORM_ID)
 		Trace("Found the BadDiamondCity Cell. Switched it to the good one")
-		curCell = GoodDiamondCity
+		curCell = GOOD_DIAMOND_CITY_FORM_ID
 	endif
 
 	Trace("OnCellLoad " + curCell + " - Exterior: " + IsExteriorCell() + " at " + _lastWorldSpace)
@@ -637,15 +655,16 @@ function OnCellChanged()
 	endif
 endFunction
 
-function ProcessCellLoadOnPackages(Quest[] packs, Cell curCell)
+function ProcessCellLoadOnPackages(Quest[] packs, int curCell)
 	int i = 0
 	while i < packs.Length
 		BARD:OC:BARD_LocatorsPackData packData = packs[i] as BARD:OC:BARD_LocatorsPackData
 		if(packData.Enabled == true && packData.Visible == true && !packData.IsCompleted())
-			if(HasSameWorldSpace(packData.WorldSpaceName))
+			if(HasSameWorldSpace(packData.WorldSpaceID))
 				packData.ProcessCellLoaded(curCell)
 			endif
 		endif
+
         i += 1
 	endWhile
 endFunction
